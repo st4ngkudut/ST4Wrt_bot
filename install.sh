@@ -1,9 +1,10 @@
 #!/bin/sh
 
 # ==============================================================================
-# Skrip Instalasi OtomatisST4Wrt Bot
+# Skrip Instalasi Otomatis ST4Wrt Bot (Versi Perbaikan)
 # ==============================================================================
 
+# Fungsi untuk mencetak teks berwarna
 print_info() {
     printf "\033[34m%s\033[0m\n" "$1"
 }
@@ -26,7 +27,6 @@ opkg update
 opkg install python3 python3-pip git git-http wrtbwmon speedtest-go etherwake nano
 
 print_success "✅ Dependensi sistem berhasil diinstal."
-
 sleep 3 && clear
 
 # --- Langkah 2: Instal Library Python ---
@@ -34,7 +34,6 @@ print_info "➡️ [Langkah 2/5] Menginstal library Python yang dibutuhkan..."
 pip install python-telegram-bot python-dotenv
 
 print_success "✅ Library Python berhasil diinstal."
-
 sleep 3 && clear
 
 # --- Langkah 3: Penyiapan Direktori dan File Proyek ---
@@ -50,18 +49,17 @@ else
     print_success "✅ Repositori berhasil diklon."
 fi
 
-sleep 3 && clear
-
 # Buat file-file konfigurasi jika belum ada
 touch .env
-touch device_aliases.json
-echo "{}" > device_aliases.json
-touch .gitignore
+# Inisialisasi device_aliases.json jika belum ada atau kosong
+if [ ! -s "device_aliases.json" ]; then
+    echo "{}" > device_aliases.json
+fi
+# Siapkan .gitignore
 echo ".env" > .gitignore
 echo "device_aliases.json" >> .gitignore
 
 print_success "✅ File proyek dan konfigurasi berhasil disiapkan."
-
 sleep 3 && clear
 
 # --- Langkah 4: Konfigurasi .env Interaktif ---
@@ -90,25 +88,26 @@ while true; do
 done
 
 # Meminta pengaturan opsional (Guest WiFi)
-printf "Masukkan nama interface WiFi Tamu Anda (contoh: wlan1-1). Biarkan kosong jika tidak ada: "
+printf "Masukkan nama interface WiFi Tamu (contoh: wlan1-1). Biarkan kosong jika tidak ada: "
 read -r GUEST_WIFI_IFACE
-if [ -z "$GUEST_WIFI_IFACE" ]; then
-    GUEST_WIFI_IFACE="wlan1" # Nilai default jika dibiarkan kosong
-    print_info "Menggunakan nilai default 'wlan1' untuk WiFi Tamu."
-fi
 
 # Menulis konfigurasi ke file .env
-cat > .env << EOF
+# [PERBAIKAN] Menggunakan 'EOF' untuk mencegah ekspansi variabel oleh shell
+cat > .env << 'EOF'
 # Konfigurasi ST4Wrt Bot
 TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
 TELEGRAM_ADMIN_ID="$TELEGRAM_ADMIN_ID"
-
-# (Opsional) Untuk fitur WiFi Tamu, ganti dengan nama interface WiFi tamu Anda
-GUEST_WIFI_IFACE="$GUEST_WIFI_IFACE"
 EOF
 
-print_success "✅ File .env berhasil dibuat."
+# [PERBAIKAN] Hanya tambahkan GUEST_WIFI_IFACE jika pengguna memasukkan nilainya
+if [ -n "$GUEST_WIFI_IFACE" ]; then
+    # Menambahkan baris baru jika file .env tidak berakhir dengan baris baru
+    [ -n "$(tail -c1 .env)" ] && echo "" >> .env
+    echo "# (Opsional) Untuk fitur WiFi Tamu" >> .env
+    echo "GUEST_WIFI_IFACE=\"$GUEST_WIFI_IFACE\"" >> .env
+fi
 
+print_success "✅ File .env berhasil dibuat."
 sleep 3 && clear
 
 # --- Langkah 5: Membuat dan Mengaktifkan Layanan init.d ---
