@@ -31,7 +31,7 @@ sleep 3 && clear
 
 # --- Langkah 2: Instal Library Python ---
 print_info "➡️ [Langkah 2/5] Menginstal library Python yang dibutuhkan..."
-pip install python-telegram-bot python-dotenv
+pip install python-telegram-bot python-dotenv python-telegram-bot[job-queue]
 
 print_success "✅ Library Python berhasil diinstal."
 sleep 3 && clear
