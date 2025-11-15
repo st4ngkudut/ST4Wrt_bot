@@ -1,108 +1,91 @@
 #!/bin/sh
 
-print_info()    { printf "\033[34m%s\033[0m\n" "$1"; }
-print_success() { printf "\033[32m%s\033[0m\n" "$1"; }
-print_warning() { printf "\033[33m%s\033[0m\n" "$1"; }
-print_error()   { printf "\033[31m%s\033[0m\n" "$1"; }
+print() { printf "%s\n" "$1"; }
 
 set -e
 
-print_info "Memeriksa versi Python..."
-python3 - << 'EOF'
-import sys
-if sys.version_info < (3,10):
-    print("Python 3.10 diperlukan.")
-    exit(1)
-EOF
-print_success "Python OK."
-
-print_info "Menginstal dependensi..."
+print "Menginstal dependensi..."
 opkg update
-opkg install python3 python3-pip git git-http wrtbwmon etherwake nano || true
-opkg install speedtest-go || print_warning "speedtest-go tidak tersedia."
-print_success "Dependensi terinstal."
+opkg install python3 python3-pip git git-http wrtbwmon speedtest-go etherwake nano
+
+print "Menginstal library Python..."
+pip install python-telegram-bot python-dotenv python-telegram-bot[job-queue]
 
 BOT_DIR="/root/ST4Wrt-bot"
 
-print_info "Menyiapkan direktori..."
+print "Menyiapkan direktori..."
 if [ -d "$BOT_DIR" ]; then
-    print_warning "Direktori proyek sudah ada."
+    print "Direktori proyek sudah ada."
     cd "$BOT_DIR"
 else
     git clone https://github.com/st4ngkudut/ST4Wrt_bot.git "$BOT_DIR"
     cd "$BOT_DIR"
 fi
 
-touch .env
-[ -s device_aliases.json ] || echo "{}" > device_aliases.json
+print "Konfigurasi Bot..."
+
+printf "Token Bot: "
+read RAWTOKEN
+TOKEN=$(echo "$RAWTOKEN" | tr -cd 'A-Za-z0-9:_-')
+while [ -z "$TOKEN" ]; do
+    printf "Token Bot: "
+    read RAWTOKEN
+    TOKEN=$(echo "$RAWTOKEN" | tr -cd 'A-Za-z0-9:_-')
+done
+
+printf "Admin ID (angka): "
+read RAWID
+ADMINID=$(echo "$RAWID" | tr -cd '0-9')
+while [ -z "$ADMINID" ]; do
+    printf "Admin ID (angka): "
+    read RAWID
+    ADMINID=$(echo "$RAWID" | tr -cd '0-9')
+done
+
+printf "WiFi Tamu (opsional, kosongkan jika tidak ada): "
+read GUEST
+
+cat <<EOF > .env
+TELEGRAM_BOT_TOKEN="$TOKEN"
+TELEGRAM_ADMIN_ID="$ADMINID"
+EOF
+
+if [ -n "$GUEST" ]; then
+    echo "GUEST_WIFI_IFACE=\"$GUEST\"" >> .env
+fi
+
+touch device_aliases.json
+[ ! -s device_aliases.json ] && echo "{}" > device_aliases.json
+
 echo ".env" > .gitignore
 echo "device_aliases.json" >> .gitignore
 
-print_info "Konfigurasi Bot..."
+print "Membuat layanan bot..."
 
-while true; do
-    printf "Token Bot: "
-    read TELEGRAM_BOT_TOKEN
-    [ -n "$TELEGRAM_BOT_TOKEN" ] && break
-    print_error "Token tidak boleh kosong."
-done
+INIT="/etc/init.d/st4wrt-bot"
 
-while true; do
-    printf "Admin ID (angka): "
-    read TELEGRAM_ADMIN_ID
-    case "$TELEGRAM_ADMIN_ID" in
-        *[!0-9]*|"") print_error "Admin ID harus angka." ;;
-        *) break ;;
-    esac
-done
-
-printf "Interface WiFi tamu (opsional): "
-read GUEST_WIFI_IFACE
-
-echo "# ST4Wrt Bot Config" > .env
-echo "TELEGRAM_BOT_TOKEN=\"$TELEGRAM_BOT_TOKEN\"" >> .env
-echo "TELEGRAM_ADMIN_ID=\"$TELEGRAM_ADMIN_ID\"" >> .env
-
-[ -n "$GUEST_WIFI_IFACE" ] && echo "GUEST_WIFI_IFACE=\"$GUEST_WIFI_IFACE\"" >> .env
-
-chmod 600 .env
-print_success ".env dibuat."
-
-print_info "Menginstal library Python..."
-pip install --break-system-packages python-telegram-bot python-dotenv python-telegram-bot[job-queue]
-print_success "Library Python terinstal."
-
-print_info "Membuat service..."
-
-INIT_SCRIPT_PATH="/etc/init.d/st4wrt-bot"
-
-cat > "$INIT_SCRIPT_PATH" << 'EOF'
+cat <<'EOF' > "$INIT"
 #!/bin/sh /etc/rc.common
-
 NAME=st4wrt-bot
 BOT_DIR="/root/ST4Wrt-bot"
+BOT_COMMAND="/usr/bin/python3 ${BOT_DIR}/bot.py"
 START=99
 STOP=10
 USE_PROCD=1
-
 start_service() {
     procd_open_instance "$NAME"
-    procd_set_param command /usr/bin/python3 $BOT_DIR/bot.py
+    procd_set_param command $BOT_COMMAND
     procd_set_param dir "$BOT_DIR"
     procd_set_param respawn
     procd_set_param stdout 1
     procd_set_param stderr 1
     procd_close_instance
 }
-
-stop_service() {
-    echo "Menghentikan bot..."
-}
 EOF
 
-chmod +x "$INIT_SCRIPT_PATH"
-$INIT_SCRIPT_PATH enable
-$INIT_SCRIPT_PATH start
+chmod +x "$INIT"
+"$INIT" enable
+"$INIT" start
 
-print_success "Bot berhasil dijalankan."
-print_info "Gunakan '/etc/init.d/st4wrt-bot status' untuk cek status."
+print "Instalasi selesai. Bot berjalan."
+print "Cek status: /etc/init.d/st4wrt-bot status"
