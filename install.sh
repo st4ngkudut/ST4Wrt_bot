@@ -4,44 +4,50 @@
 # Skrip Instalasi Otomatis ST4Wrt Bot (Versi Perbaikan)
 # ==============================================================================
 
-# Fungsi untuk mencetak teks berwarna
-print_info() {
-    printf "\033[34m%s\033[0m\n" "$1"
-}
-print_success() {
-    printf "\033[32m%s\033[0m\n" "$1"
-}
-print_warning() {
-    printf "\033[33m%s\033[0m\n" "$1"
-}
-print_error() {
-    printf "\033[31m%s\033[0m\n" "$1"
-}
+# Fungsi warna teks
+print_info()     { printf "\033[34m%s\033[0m\n" "$1"; }
+print_success()  { printf "\033[32m%s\033[0m\n" "$1"; }
+print_warning()  { printf "\033[33m%s\033[0m\n" "$1"; }
+print_error()    { printf "\033[31m%s\033[0m\n" "$1"; }
 
-# Hentikan skrip jika ada error
+# Hentikan skrip jika error
 set -e
 
-# --- Langkah 1: Instalasi Dependensi ---
-print_info "➡️ [Langkah 1/5] Memperbarui daftar paket dan menginstal dependensi..."
+# --- Cek versi Python (PTB butuh Python ≥ 3.10) ---
+print_info "➡️ Memeriksa versi Python..."
+python3 - << 'EOF'
+import sys
+if sys.version_info < (3,10):
+    print("Python 3.10 atau lebih baru diperlukan! Update firmware OpenWrt Anda.")
+    exit(1)
+EOF
+
+print_success "✅ Versi Python memenuhi syarat."
+
+# --- Langkah 1: Install Dependensi ---
+print_info "➡️ [Langkah 1/5] Memperbarui paket dan menginstal dependensi..."
 opkg update
-opkg install python3 python3-pip git git-http wrtbwmon speedtest-go etherwake nano
+opkg install python3 python3-pip git git-http wrtbwmon etherwake nano || true
+opkg install speedtest-go || print_warning "⚠️ speedtest-go tidak tersedia untuk arsitektur ini."
 
 print_success "✅ Dependensi sistem berhasil diinstal."
-sleep 3 && clear
+sleep 2 && clear
 
-# --- Langkah 2: Instal Library Python ---
-print_info "➡️ [Langkah 2/5] Menginstal library Python yang dibutuhkan..."
-pip install python-telegram-bot python-dotenv python-telegram-bot[job-queue]
+# --- Langkah 2: Install library Python ---
+print_info "➡️ [Langkah 2/5] Menginstal library Python..."
+
+# OpenWrt kadang butuh --break-system-packages
+pip install --break-system-packages python-telegram-bot python-dotenv python-telegram-bot[job-queue]
 
 print_success "✅ Library Python berhasil diinstal."
-sleep 3 && clear
+sleep 2 && clear
 
-# --- Langkah 3: Penyiapan Direktori dan File Proyek ---
+# --- Langkah 3: Siapkan Direktori Proyek ---
 BOT_DIR="/root/ST4Wrt-bot"
 print_info "➡️ [Langkah 3/5] Menyiapkan direktori proyek di $BOT_DIR..."
 
 if [ -d "$BOT_DIR" ]; then
-    print_warning "⚠️ Direktori $BOT_DIR sudah ada. Melewatkan kloning dari GitHub."
+    print_warning "⚠️ Direktori sudah ada. Skip kloning Git."
     cd "$BOT_DIR"
 else
     git clone https://github.com/st4ngkudut/ST4Wrt_bot.git "$BOT_DIR"
@@ -49,78 +55,68 @@ else
     print_success "✅ Repositori berhasil diklon."
 fi
 
-# Buat file-file konfigurasi jika belum ada
+# Siapkan file penting
 touch .env
-# Inisialisasi device_aliases.json jika belum ada atau kosong
-if [ ! -s "device_aliases.json" ]; then
-    echo "{}" > device_aliases.json
-fi
-# Siapkan .gitignore
+[ -s device_aliases.json ] || echo "{}" > device_aliases.json
+
 echo ".env" > .gitignore
 echo "device_aliases.json" >> .gitignore
 
-print_success "✅ File proyek dan konfigurasi berhasil disiapkan."
-sleep 3 && clear
+print_success "✅ File proyek & konfigurasi siap."
+sleep 2 && clear
 
-# --- Langkah 4: Konfigurasi .env Interaktif ---
-print_info "➡️ [Langkah 4/5] Meminta informasi untuk konfigurasi..."
+# --- Langkah 4: Konfigurasi .env ---
+print_info "➡️ [Langkah 4/5] Konfigurasi Bot..."
 
-# Meminta Token Bot hingga input valid
+# Ambil input Token Bot
 while true; do
-    printf "Silakan masukkan Token Bot Anda dari @BotFather: "
+    printf "Masukkan Token Bot Telegram Anda: "
     read -r TELEGRAM_BOT_TOKEN
-    if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-        break
-    else
-        print_error "Token Bot tidak boleh kosong. Silakan coba lagi."
-    fi
+    [ -n "$TELEGRAM_BOT_TOKEN" ] && break
+    print_error "Token tidak boleh kosong!"
 done
 
-# Meminta Admin ID hingga input valid
+# Ambil Admin ID
 while true; do
-    printf "Silakan masukkan Admin ID Telegram Anda (hanya angka): "
+    printf "Masukkan Admin ID Telegram Anda (angka): "
     read -r TELEGRAM_ADMIN_ID
-    if [ -n "$TELEGRAM_ADMIN_ID" ] && echo "$TELEGRAM_ADMIN_ID" | grep -qE '^[0-9]+$'; then
-        break
-    else
-        print_error "Admin ID harus berupa angka dan tidak boleh kosong. Silakan coba lagi."
-    fi
+    echo "$TELEGRAM_ADMIN_ID" | grep -qE '^[0-9]+$' && break
+    print_error "Admin ID harus angka!"
 done
 
-# Meminta pengaturan opsional (Guest WiFi)
-printf "Masukkan nama interface WiFi Tamu (contoh: wlan1-1). Biarkan kosong jika tidak ada: "
+printf "Masukkan interface WiFi Tamu (opsional, contoh: wlan1-1): "
 read -r GUEST_WIFI_IFACE
 
-# Menulis konfigurasi ke file .env
-# [PERBAIKAN] Menggunakan 'EOF' untuk mencegah ekspansi variabel oleh shell
-cat > .env << 'EOF'
+# Buat file .env (perbaikan ekspansi variabel)
+cat > .env << EOF
 # Konfigurasi ST4Wrt Bot
 TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
 TELEGRAM_ADMIN_ID="$TELEGRAM_ADMIN_ID"
 EOF
 
-# [PERBAIKAN] Hanya tambahkan GUEST_WIFI_IFACE jika pengguna memasukkan nilainya
+# Tambah WiFi tamu jika ada
 if [ -n "$GUEST_WIFI_IFACE" ]; then
-    # Menambahkan baris baru jika file .env tidak berakhir dengan baris baru
-    [ -n "$(tail -c1 .env)" ] && echo "" >> .env
-    echo "# (Opsional) Untuk fitur WiFi Tamu" >> .env
+    echo "" >> .env
+    echo "# Interface WiFi tamu" >> .env
     echo "GUEST_WIFI_IFACE=\"$GUEST_WIFI_IFACE\"" >> .env
 fi
 
-print_success "✅ File .env berhasil dibuat."
-sleep 3 && clear
+# Keamanan .env
+chmod 600 .env
 
-# --- Langkah 5: Membuat dan Mengaktifkan Layanan init.d ---
+print_success "✅ File .env berhasil dibuat."
+sleep 2 && clear
+
+# --- Langkah 5: Membuat Layanan init.d ---
 print_info "➡️ [Langkah 5/5] Membuat layanan autostart..."
+
 INIT_SCRIPT_PATH="/etc/init.d/st4wrt-bot"
 
-# Menulis skrip init.d
 cat > "$INIT_SCRIPT_PATH" << 'EOF'
 #!/bin/sh /etc/rc.common
 
 NAME=st4wrt-bot
 BOT_DIR="/root/ST4Wrt-bot"
-BOT_COMMAND="/usr/bin/python3 ${BOT_DIR}/bot.py"
 
 START=99
 STOP=10
@@ -129,7 +125,7 @@ USE_PROCD=1
 
 start_service() {
     procd_open_instance "$NAME"
-    procd_set_param command $BOT_COMMAND
+    procd_set_param command /usr/bin/python3 $BOT_DIR/bot.py
     procd_set_param dir "$BOT_DIR"
     procd_set_param respawn
     procd_set_param stdout 1
@@ -137,8 +133,8 @@ start_service() {
     procd_close_instance
 }
 
-service_triggers() {
-    procd_add_reload_trigger "$NAME"
+stop_service() {
+    echo "Menghentikan bot..."
 }
 EOF
 
@@ -146,10 +142,11 @@ chmod +x "$INIT_SCRIPT_PATH"
 "$INIT_SCRIPT_PATH" enable
 "$INIT_SCRIPT_PATH" start
 
-print_success "✅ Layanan bot berhasil dibuat, diaktifkan, dan dijalankan!"
-print_info "=========================================================="
-print_info "🎉 Instalasi Selesai! 🎉"
-print_info "Bot Anda sekarang berjalan di latar belakang."
-print_info "Cek status dengan: /etc/init.d/st4wrt-bot status"
-print_info "Buka Telegram dan kirim /start ke bot Anda."
-print_info "=========================================================="
+print_success "✅ Layanan bot berhasil dibuat dan dijalankan!"
+print_info "==============================================================="
+print_info "🎉 Instalasi selesai!"
+print_info "Perintah penting:"
+print_info "  👉 Cek status bot : /etc/init.d/st4wrt-bot status"
+print_info "  👉 Mulai ulang    : /etc/init.d/st4wrt-bot restart"
+print_info "  👉 Log realtime   : logread -f"
+print_info "==============================================================="
