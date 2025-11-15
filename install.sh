@@ -11,7 +11,7 @@ print_info "Memeriksa versi Python..."
 python3 - << 'EOF'
 import sys
 if sys.version_info < (3,10):
-    print("Python 3.10 atau lebih baru diperlukan.")
+    print("Python 3.10 diperlukan.")
     exit(1)
 EOF
 print_success "Python OK."
@@ -50,8 +50,10 @@ done
 while true; do
     printf "Admin ID (angka): "
     read TELEGRAM_ADMIN_ID
-    echo "$TELEGRAM_ADMIN_ID" | grep -qE '^[0-9]+$' && break
-    print_error "Admin ID harus angka."
+    case "$TELEGRAM_ADMIN_ID" in
+        *[!0-9]*|"") print_error "Admin ID harus angka." ;;
+        *) break ;;
+    esac
 done
 
 printf "Interface WiFi tamu (opsional): "
@@ -61,9 +63,7 @@ echo "# ST4Wrt Bot Config" > .env
 echo "TELEGRAM_BOT_TOKEN=\"$TELEGRAM_BOT_TOKEN\"" >> .env
 echo "TELEGRAM_ADMIN_ID=\"$TELEGRAM_ADMIN_ID\"" >> .env
 
-[ -n "$GUEST_WIFI_IFACE" ] && {
-    echo "GUEST_WIFI_IFACE=\"$GUEST_WIFI_IFACE\"" >> .env
-}
+[ -n "$GUEST_WIFI_IFACE" ] && echo "GUEST_WIFI_IFACE=\"$GUEST_WIFI_IFACE\"" >> .env
 
 chmod 600 .env
 print_success ".env dibuat."
