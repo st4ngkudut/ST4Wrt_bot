@@ -6,5 +6,5 @@ curl -sL https://raw.githubusercontent.com/st4ngkudut/ST4Wrt_bot/main/install.sh
 ```
 ### Edit Konfigurasi manual
 ```bash
-nano .env
+nano /root/ST4Wrt-bot/.env
 ```
