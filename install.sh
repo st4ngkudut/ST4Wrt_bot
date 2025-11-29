@@ -147,9 +147,3 @@ ok "Bot Telegram sedang berjalan."
 
 printf "\nCek status bot:\n  ${YELLOW}/etc/init.d/st4wrt-bot status${RESET}\n"
 printf "Lihat log bot:\n  ${YELLOW}logread -f${RESET}\n\n"
-
-"$INIT" enable
-"$INIT" restart
-
-print "Instalasi selesai. Bot berjalan."
-print "Cek status: /etc/init.d/st4wrt-bot status"
